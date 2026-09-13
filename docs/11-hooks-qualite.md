@@ -47,7 +47,10 @@ npm run verify   # lint + arch:check + test + build, dans cet ordre
   hook) — c'est le rôle de la CI.
 - Pas de scan de vulnérabilités applicatives (SAST/DAST) automatisé — à faire via le skill
   `security-review` avant une mise en production, ou un outil dédié en CI si le besoin grandit.
-- Pas de couverture de tests minimale imposée pour l'instant (le MVP a été validé par des tests
-  end-to-end manuels documentés dans les messages de commit et cette session de développement ;
-  ajouter des tests unitaires/e2e automatisés sur les modules `requests`/`quotas`/
-  `access-control` est le prochain investissement qualité recommandé).
+- Pas de couverture de tests minimale imposée pour l'instant. Des tests unitaires automatisés
+  couvrent désormais la logique metier des modules `requests` (machine à statuts, tous les cas
+  d'usage de `application/commands`), `quotas` (réservation/libération atomique) et
+  `access-control` (verdicts de scan, synchronisation hors-ligne idempotente) — cf. les fichiers
+  `*.spec.ts` colocalisés. Le prochain investissement qualité recommandé est d'étendre cette
+  couverture aux tests d'intégration end-to-end (`test/*.e2e-spec.ts`) contre une vraie base, qui
+  restent hors du périmètre des hooks locaux (trop lents) et sont le rôle de la CI.
