@@ -229,6 +229,9 @@ model Match {
   city                String
   status              MatchStatus @default(DRAFT)
   capacityTotal       Int?
+  /// Nombre de pupitres disponibles en tribune presse pour ce match (jauge
+  /// admin, cahier §21) — distinct de la capacite totale du stade.
+  pressTribuneCapacity Int?
   requestsOpenAt      DateTime?
   requestsCloseAt     DateTime?
   rulesNotes          String?

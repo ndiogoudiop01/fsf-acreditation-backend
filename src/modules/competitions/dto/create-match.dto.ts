@@ -45,6 +45,15 @@ export class CreateMatchDto {
   @Min(0)
   capacityTotal?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Nombre de pupitres en tribune presse (jauge admin, cahier §21)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  pressTribuneCapacity?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
