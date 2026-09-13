@@ -33,6 +33,7 @@ export const ErrorCodes = {
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
   FORBIDDEN_SCOPE: 'FORBIDDEN_SCOPE',
+  REPORT_UNKNOWN: 'REPORT_UNKNOWN',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

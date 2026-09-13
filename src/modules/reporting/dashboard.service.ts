@@ -8,7 +8,7 @@ import {
 import { PrismaService } from '../../infrastructure/persistence/prisma/prisma.service.js';
 import type { DashboardFilterDto } from './dto/dashboard-filter.dto.js';
 
-const PENDING_STATUSES: RequestStatus[] = [
+export const PENDING_STATUSES: RequestStatus[] = [
   RequestStatus.SUBMITTED,
   RequestStatus.UNDER_REVIEW,
   RequestStatus.COMPLETE,

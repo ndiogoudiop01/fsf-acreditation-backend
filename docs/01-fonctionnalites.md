@@ -123,7 +123,10 @@ futures")**. Chaque ligne référence la section correspondante du cahier des ch
   filtrables par compétition/match/média/catégorie/zone/statut.
 - [MVP] Recherche transverse par demandeur, média, accréditation, match, référence unique ou
   jeton QR (droits respectés, exposition minimale des données personnelles).
-- [MVP] Exports Excel/CSV/PDF avec mention d'auteur, date, périmètre et confidentialité.
+- [MVP] Exports Excel/CSV/PDF avec mention d'auteur, date, périmètre et confidentialité :
+  accrédités par match/média/catégorie, demandes refusées, dossiers en attente, entrées
+  contrôlées, anomalies de contrôle d'accès, et un rapport jour de match dédié (PDF) —
+  `GET /admin/exports/:report/:format` et `GET /admin/exports/match-day/pdf`.
 - [Backlog] Statistiques historiques pluri-saisons et tableaux de pilotage avancés.
 
 ## 11. Sécurité, conformité & traçabilité (§24, §28)
