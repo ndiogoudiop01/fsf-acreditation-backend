@@ -20,8 +20,13 @@ futures")**. Chaque ligne référence la section correspondante du cahier des ch
   durée configurables), levé automatiquement à la réactivation par un administrateur.
 - [MVP] Traçabilité des connexions : IP, appareil (user-agent), succès/échec et motif pour
   chaque tentative — consultable par utilisateur ou de façon transversale (cahier §24).
+- [MVP] Réinitialisation du mot de passe d'un compte interne par un administrateur (fonction
+  explicitement listée au cahier §23) — révoque aussi les sessions actives du compte concerné.
 - [Backlog] Authentification à deux facteurs (MFA) — "si retenue" par la FSF.
 - [Backlog] Revue périodique automatisée des habilitations (rappel planifié).
+- [Backlog] Restriction de périmètre (ex. Responsable limité à certaines compétitions/médias) —
+  le cahier §23 marque une partie des droits de la matrice "à confirmer par périmètre" ; le
+  contrôle actuel est par rôle global uniquement, pas encore par sous-ensemble de données.
 - [Backlog] Invitation en libre-service par lien à usage unique (le MVP crée le compte avec un
   mot de passe temporaire communiqué hors bande par l'administrateur).
 

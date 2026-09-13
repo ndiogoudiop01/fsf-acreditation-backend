@@ -45,6 +45,10 @@ describe('UsersService', () => {
       findMany: ReturnType<typeof vi.fn>;
       count: ReturnType<typeof vi.fn>;
     };
+    refreshToken: {
+      updateMany: ReturnType<typeof vi.fn>;
+    };
+    $transaction: ReturnType<typeof vi.fn>;
   };
   let passwordHasher: PasswordHasherService;
   let config: AppConfigService;
@@ -62,9 +66,13 @@ describe('UsersService', () => {
         count: vi.fn(),
       },
       loginAttempt: { findMany: vi.fn(), count: vi.fn() },
+      refreshToken: { updateMany: vi.fn() },
+      $transaction: vi.fn((ops: unknown[]) =>
+        Promise.all(ops as Promise<unknown>[]),
+      ),
     };
     passwordHasher = {
-      hash: vi.fn(),
+      hash: vi.fn().mockResolvedValue('new-hash'),
       verify: vi.fn(),
     } as unknown as PasswordHasherService;
     config = {
@@ -207,6 +215,40 @@ describe('UsersService', () => {
       await expect(
         service.deleteStaffUser('user-1', 'admin-1'),
       ).rejects.toThrow('boom');
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('leve USER_NOT_FOUND si le compte cible est introuvable', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.resetPassword('missing', 'NewPass123!', 'admin-1'),
+      ).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('met a jour le hash, leve le verrouillage et revoque les sessions actives', async () => {
+      prisma.user.findUnique.mockResolvedValue(buildUser());
+      prisma.user.update.mockResolvedValue(buildUser());
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
+
+      await service.resetPassword('user-1', 'NewPass123!', 'admin-1');
+
+      expect(passwordHasher.hash).toHaveBeenCalledWith('NewPass123!');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
+          passwordHash: 'new-hash',
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      });
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(eventBus.publish).toHaveBeenCalledTimes(1);
     });
   });
 

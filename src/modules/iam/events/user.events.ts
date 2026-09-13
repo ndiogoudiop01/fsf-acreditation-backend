@@ -39,6 +39,16 @@ export class UserStatusUpdatedEvent extends DomainEvent {
   }
 }
 
+export class UserPasswordResetEvent extends DomainEvent {
+  readonly eventName = 'user.password_reset';
+  constructor(
+    public readonly userId: string,
+    public readonly actorId: string,
+  ) {
+    super();
+  }
+}
+
 export class UserDeletedEvent extends DomainEvent {
   readonly eventName = 'user.deleted';
   constructor(

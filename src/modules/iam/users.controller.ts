@@ -17,6 +17,7 @@ import type { AuthenticatedUser } from '../../shared/kernel/types/authenticated-
 import { UsersService } from './users.service.js';
 import { CreateStaffUserDto } from './dto/create-staff-user.dto.js';
 import { ListUsersDto } from './dto/list-users.dto.js';
+import { ResetStaffPasswordDto } from './dto/reset-staff-password.dto.js';
 import { UpdateStaffUserDto } from './dto/update-staff-user.dto.js';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto.js';
 import { ListLoginAttemptsDto } from './dto/list-login-attempts.dto.js';
@@ -85,6 +86,25 @@ export class UsersController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.usersService.updateStaffUser(id, dto, actor.id);
+  }
+
+  @Patch(':id/password')
+  @RequirePermissions(Permission.USERS_MANAGE)
+  @ApiOperation({
+    summary:
+      "Reinitialiser le mot de passe d'un compte interne (cahier §23) — revoque aussi ses sessions actives",
+  })
+  async resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResetStaffPasswordDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<{ success: true }> {
+    await this.usersService.resetPassword(
+      id,
+      dto.newTemporaryPassword,
+      actor.id,
+    );
+    return { success: true };
   }
 
   @Patch(':id/status')

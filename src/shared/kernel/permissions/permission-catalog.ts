@@ -62,7 +62,14 @@ export const ROLE_PERMISSIONS: Record<StaffRole, PermissionValue[]> = {
     Permission.EXPORT_DATA,
     Permission.AUDIT_READ,
   ],
-  [StaffRole.AGENT_CONTROLE]: [Permission.SCAN_PERFORM, Permission.SCAN_READ],
+  // Cahier §23, matrice indicative : "Consulter tableaux de bord" = L (lire)
+  // pour l'Agent de contrôle — le tableau de bord jour de match (§22) est
+  // justement pensé pour un usage terrain par ce rôle.
+  [StaffRole.AGENT_CONTROLE]: [
+    Permission.SCAN_PERFORM,
+    Permission.SCAN_READ,
+    Permission.DASHBOARD_READ,
+  ],
   [StaffRole.SUPERVISEUR]: [
     Permission.COMPETITIONS_READ,
     Permission.MEDIA_READ,

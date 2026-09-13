@@ -17,6 +17,7 @@ import {
 import {
   UserAccountCreatedEvent,
   UserDeletedEvent,
+  UserPasswordResetEvent,
   UserRoleUpdatedEvent,
   UserStatusUpdatedEvent,
 } from './events/user.events.js';
@@ -230,6 +231,46 @@ export class UsersService {
       new UserStatusUpdatedEvent(id, user.status, status, actorId),
     );
     return updated;
+  }
+
+  /**
+   * Reinitialisation du mot de passe par un administrateur (cahier §23,
+   * fonction "reinitialisation"). Revoque aussi toutes les sessions actives
+   * (refresh tokens) : un mot de passe reinitialise ne doit pas laisser une
+   * session existante utilisable indefiniment, et leve un verrouillage
+   * residuel puisque le titulaire repart avec un nouveau mot de passe.
+   */
+  async resetPassword(
+    id: string,
+    newPassword: string,
+    actorId: string,
+  ): Promise<void> {
+    const user = await this.findById(id);
+    if (!user) {
+      throw new DomainError(
+        ErrorCodes.USER_NOT_FOUND,
+        'Utilisateur introuvable.',
+        'NOT_FOUND',
+      );
+    }
+
+    const passwordHash = await this.passwordHasher.hash(newPassword);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id },
+        data: {
+          passwordHash,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    this.eventBus.publish(new UserPasswordResetEvent(id, actorId));
   }
 
   /**
