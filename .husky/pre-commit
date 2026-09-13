@@ -1,0 +1,2 @@
+node scripts/hooks/check-secrets.mjs
+npx lint-staged

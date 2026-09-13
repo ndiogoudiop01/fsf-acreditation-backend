@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    // Incremental desactive volontairement : le cache `.tsbuildinfo` ne
+    // verifie pas que les fichiers de sortie existent encore, ce qui a deja
+    // provoque un `nest build` "reussi" (exit 0) sans emettre `dist/main.js`
+    // apres suppression de `dist/` par le script `prebuild`. Le projet est
+    // assez petit pour qu'une compilation complete reste rapide.
+    "incremental": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "types": ["vitest/globals", "node"]
+  }
+}

@@ -1,0 +1,665 @@
+// Schema Prisma — Plateforme d'accreditation FSF
+// Voir docs/04-modele-de-donnees.md pour la justification de chaque entite
+// (mapping direct sur le cahier des charges, section 29 "Modele de donnees conceptuel").
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// IAM — module `iam` (cahier §4, §23)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum UserKind {
+  STAFF
+  REQUESTER
+}
+
+enum StaffRole {
+  ADMIN
+  RESPONSABLE_ACCREDITATION
+  COMMISSION_VALIDATION
+  AGENT_CONTROLE
+  SUPERVISEUR
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  kind         UserKind
+  role         StaffRole?
+  status       UserStatus @default(PENDING)
+  mfaEnabled   Boolean    @default(false)
+  // Nom d'affichage humain (ex. "Agent Cdt. Sarr") pour les journaux de scan
+  // et interfaces internes — l'email seul est peu lisible sur le terrain.
+  displayName  String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  requesterProfile RequesterProfile?
+  refreshTokens    RefreshToken[]
+
+  uploadedDocuments     Document[]          @relation("DocumentUploadedBy")
+  reviewedDocuments     Document[]          @relation("DocumentReviewedBy")
+  requestedComplements  RequestComplement[] @relation("ComplementRequestedBy")
+  decisions             RequestDecision[]   @relation("DecisionActor")
+  revokedAccreditations Accreditation[]     @relation("AccreditationRevokedBy")
+  scansPerformed        ScanLog[]           @relation("ScanPerformedBy")
+  notificationsReceived NotificationLog[]   @relation("NotificationRecipient")
+  auditLogs             AuditLog[]          @relation("AuditActor")
+
+  @@index([kind, role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdByIp String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Medias & demandeurs — module `media` (cahier §7, §8)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum MediaType {
+  TELEVISION
+  RADIO
+  PRESSE_ECRITE
+  PRESSE_EN_LIGNE
+  AGENCE
+  PHOTOGRAPHE
+  CREATEUR_CONTENU
+  MEDIA_INTERNATIONAL
+  AUTRE
+}
+
+enum MediaStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+  SUSPENDED
+}
+
+/**
+ * Statut du média vis-a-vis des droits de diffusion (Phase 2 — espace
+ * "Rédacteur en Chef" et attribution de cabines commentateurs). Determine
+ * l'éligibilité aux zones à privilège (cabines, sas flash) — logique
+ * d'attribution laissée au gestionnaire (pas d'automatisation stricte).
+ */
+enum BroadcasterTier {
+  HOST_BROADCASTER
+  CAF_RIGHTS_HOLDER
+  FIFA_RIGHTS_HOLDER
+  NON_RIGHTS_HOLDER
+  WRITTEN_PRESS_ACCREDITED
+}
+
+model Media {
+  id              String           @id @default(uuid())
+  name            String
+  type            MediaType
+  country         String
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  responsibleName String?
+  status          MediaStatus      @default(PENDING)
+  broadcasterTier BroadcasterTier?
+  internalRef     String?          @unique
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  requesters RequesterProfile[]
+
+  @@index([status])
+  @@index([name])
+  @@map("media")
+}
+
+enum RequesterStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+  SUSPENDED
+}
+
+model RequesterProfile {
+  id                String          @id @default(uuid())
+  userId            String          @unique
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaId           String
+  media             Media           @relation(fields: [mediaId], references: [id])
+  firstName         String
+  lastName          String
+  photoDocumentId   String?
+  birthDate         DateTime?
+  nationality       String?
+  phone             String
+  address           String?
+  function          String
+  specialty         String?
+  pressCardNumber   String?
+  professionalPhone String?
+  professionalEmail String?
+  status            RequesterStatus @default(PENDING)
+  // Habilite l'espace "Rédacteur en Chef" (Phase 2) : gestion des envoyés
+  // speciaux du meme media. Attribue par un administrateur.
+  isEditorInChief   Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  requests AccreditationRequest[]
+
+  @@index([mediaId])
+  @@index([status])
+  @@map("requester_profiles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Competitions & matchs — module `competitions` (cahier §5, §6)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum CompetitionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Competition {
+  id          String            @id @default(uuid())
+  name        String
+  season      String
+  organizer   String?
+  startDate   DateTime?
+  endDate     DateTime?
+  status      CompetitionStatus @default(DRAFT)
+  description String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  matches Match[]
+
+  @@index([status])
+  @@map("competitions")
+}
+
+enum MatchStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  PLAYED
+  CANCELLED
+  ARCHIVED
+}
+
+model Match {
+  id                  String      @id @default(uuid())
+  competitionId       String
+  competition         Competition @relation(fields: [competitionId], references: [id])
+  homeTeam            String
+  awayTeam            String
+  kickoffAt           DateTime
+  timezone            String      @default("Africa/Dakar")
+  stadium             String
+  city                String
+  status              MatchStatus @default(DRAFT)
+  capacityTotal       Int?
+  requestsOpenAt      DateTime?
+  requestsCloseAt     DateTime?
+  rulesNotes          String?
+  operationalContacts Json?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  quotas   MatchCategoryQuota[]
+  requests AccreditationRequest[]
+  scans    ScanLog[]
+
+  @@index([competitionId])
+  @@index([status])
+  @@index([kickoffAt])
+  @@map("matches")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Categories, zones & quotas — modules `accreditation-config` / `quotas`
+// (cahier §10, §11, §19)
+// ─────────────────────────────────────────────────────────────────────────
+
+model AccreditationCategory {
+  id                    String         @id @default(uuid())
+  code                  String         @unique
+  label                 String
+  description           String?
+  requiredDocumentTypes DocumentType[]
+  active                Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  quotas   MatchCategoryQuota[]
+  requests AccreditationRequest[]
+
+  @@map("accreditation_categories")
+}
+
+model Zone {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  label       String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  quotaZones         MatchCategoryQuotaZone[]
+  accreditationZones AccreditationZone[]
+  scanLogs           ScanLog[]
+
+  @@map("zones")
+}
+
+enum OverflowPolicy {
+  QUEUE
+  MANUAL_ARBITRATION
+  PRIORITY
+  CLOSE
+}
+
+model MatchCategoryQuota {
+  id             String                @id @default(uuid())
+  matchId        String
+  match          Match                 @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  categoryId     String
+  category       AccreditationCategory @relation(fields: [categoryId], references: [id])
+  quotaTotal     Int
+  // Compteur consomme, incremente par mise a jour conditionnelle atomique au
+  // moment ou une demande passe VALIDEE — evite la course entre deux
+  // validations concurrentes sur le meme quota (cahier §11, Annexe B).
+  consumed       Int                   @default(0)
+  overflowPolicy OverflowPolicy        @default(MANUAL_ARBITRATION)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  zones MatchCategoryQuotaZone[]
+
+  @@unique([matchId, categoryId])
+  @@map("match_category_quotas")
+}
+
+model MatchCategoryQuotaZone {
+  id      String             @id @default(uuid())
+  quotaId String
+  quota   MatchCategoryQuota @relation(fields: [quotaId], references: [id], onDelete: Cascade)
+  zoneId  String
+  zone    Zone               @relation(fields: [zoneId], references: [id])
+
+  @@unique([quotaId, zoneId])
+  @@map("match_category_quota_zones")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Documents — module `documents` (cahier §12), sujet polymorphe
+// ─────────────────────────────────────────────────────────────────────────
+
+enum DocumentSubjectType {
+  MEDIA
+  REQUESTER
+  REQUEST
+}
+
+enum DocumentType {
+  CARTE_PRESSE
+  PIECE_IDENTITE
+  PHOTO
+  LETTRE_MISSION
+  ATTESTATION_MEDIA
+  AUTRE
+}
+
+enum DocumentStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+  SUPERSEDED
+}
+
+model Document {
+  id              String              @id @default(uuid())
+  subjectType     DocumentSubjectType
+  subjectId       String
+  documentType    DocumentType
+  version         Int                 @default(1)
+  status          DocumentStatus      @default(PENDING)
+  storageKey      String
+  mimeType        String
+  sizeBytes       Int
+  checksum        String?
+  rejectionReason String?
+  uploadedById    String
+  uploadedBy      User                @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  reviewedById    String?
+  reviewedBy      User?               @relation("DocumentReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt      DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([subjectType, subjectId])
+  @@map("documents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Demandes d'accreditation — module `requests` (cahier §9, §13, §14, §15)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  INFO_REQUESTED
+  COMPLETE
+  PENDING_VALIDATION
+  VALIDATED
+  REJECTED
+  CANCELLED
+  BADGE_GENERATED
+  ACCESS_USED
+}
+
+/**
+ * Role effectif du demandeur sur l'evenement (Phase 2, cahier formulaire etape 2).
+ */
+enum RoleInEvent {
+  JOURNALISTE_REPORTER
+  PHOTOGRAPHE
+  CAMERAMAN
+  COMMENTATEUR
+  TECHNICIEN_REGIE
+}
+
+model AccreditationRequest {
+  id                  String                 @id @default(uuid())
+  uniqueReference     String                 @unique
+  requesterId         String
+  requester           RequesterProfile       @relation(fields: [requesterId], references: [id])
+  matchId             String
+  match               Match                  @relation(fields: [matchId], references: [id])
+  categoryRequestedId String
+  categoryRequested   AccreditationCategory  @relation(fields: [categoryRequestedId], references: [id])
+  status              RequestStatus          @default(DRAFT)
+  roleInEvent         RoleInEvent?
+  needsDesk           Boolean                @default(false)
+  needsPower          Boolean                @default(false)
+  needsLanWifi        Boolean                @default(false)
+  carPlateNumber      String?
+  /// Zones souhaitees par le demandeur (etape 3, carte 3D du stade) — indicatif :
+  /// l'attribution definitive reste a la discretion de la Commission (cf. decide-request.usecase).
+  preferredZoneIds    String[]               @default([])
+  submittedAt         DateTime?
+  decisionAt          DateTime?
+  decisionById        String?
+  decisionReason      String?
+  duplicateOfId       String?
+  duplicateOf         AccreditationRequest?  @relation("RequestDuplicate", fields: [duplicateOfId], references: [id])
+  duplicateFlagged    AccreditationRequest[] @relation("RequestDuplicate")
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  complements   RequestComplement[]
+  decisions     RequestDecision[]
+  accreditation Accreditation?
+
+  @@index([matchId, status])
+  @@index([requesterId])
+  @@map("accreditation_requests")
+}
+
+model RequestComplement {
+  id            String               @id @default(uuid())
+  requestId     String
+  request       AccreditationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestedById String
+  requestedBy   User                 @relation("ComplementRequestedBy", fields: [requestedById], references: [id])
+  missingItem   String
+  comment       String?
+  dueDate       DateTime?
+  reminderCount Int                  @default(0)
+  resolvedAt    DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([requestId])
+  @@map("request_complements")
+}
+
+model RequestDecision {
+  id         String               @id @default(uuid())
+  requestId  String
+  request    AccreditationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actorId    String
+  actor      User                 @relation("DecisionActor", fields: [actorId], references: [id])
+  fromStatus RequestStatus
+  toStatus   RequestStatus
+  reason     String?
+  createdAt  DateTime             @default(now())
+
+  @@index([requestId])
+  @@map("request_decisions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Accreditations / badges & QR — module `accreditations` (cahier §16, §17)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum AccreditationStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model Accreditation {
+  id                  String               @id @default(uuid())
+  requestId           String               @unique
+  request             AccreditationRequest @relation(fields: [requestId], references: [id])
+  number              String               @unique
+  status              AccreditationStatus  @default(ACTIVE)
+  qrTokenHash         String               @unique
+  issuedAt            DateTime             @default(now())
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  revokedById         String?
+  revokedBy           User?                @relation("AccreditationRevokedBy", fields: [revokedById], references: [id])
+  revocationReason    String?
+  photoDocumentId     String?
+  // Attribution granulaire (cahier §16, Phase 2 diffuseurs) : cabine
+  // commentateur / sas d'interview flash, assignes par un gestionnaire.
+  assignedBoothNumber Int?
+  assignedFlashSlot   String?
+  // Signature ECDSA P-256 du payload canonique de ce badge — permet une
+  // verification d'integrite SANS reseau sur les postes de controle
+  // hors-ligne (cahier §18). Forme : {payloadVersion, rawPayload,
+  // ecdsaSignatureHex, publicKeyFingerprint, issuedTimestamp,
+  // expiresTimestamp, offlineChecksum}. Voir EcdsaSignerService.
+  cryptoSignature     Json?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  zones AccreditationZone[]
+  scans ScanLog[]
+
+  @@index([status])
+  @@map("accreditations")
+}
+
+model AccreditationZone {
+  id              String        @id @default(uuid())
+  accreditationId String
+  accreditation   Accreditation @relation(fields: [accreditationId], references: [id], onDelete: Cascade)
+  zoneId          String
+  zone            Zone          @relation(fields: [zoneId], references: [id])
+
+  @@unique([accreditationId, zoneId])
+  @@map("accreditation_zones")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Controle d'acces — module `access-control` (cahier §17, §18, §22)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ScanResult {
+  VALID
+  INVALID
+  EXPIRED
+  REVOKED
+  ALREADY_USED
+  OUT_OF_SCOPE
+}
+
+enum ScanSource {
+  ONLINE
+  OFFLINE_SYNCED
+}
+
+/**
+ * Sens du passage — prepare le controle sortie (cahier §24 : "action").
+ */
+enum ScanAction {
+  CHECK_IN
+  CHECK_OUT
+}
+
+model ScanLog {
+  id               String         @id @default(uuid())
+  accreditationId  String?
+  accreditation    Accreditation? @relation(fields: [accreditationId], references: [id])
+  scannedTokenHash String
+  matchId          String
+  match            Match          @relation(fields: [matchId], references: [id])
+  zoneId           String?
+  zone             Zone?          @relation(fields: [zoneId], references: [id])
+  // Nom humain du poste de controle (ex. "Porte Media 1 (Diamniadio Nord)"),
+  // distinct de `deviceId` (identifiant technique de l'appareil).
+  gate             String?
+  action           ScanAction     @default(CHECK_IN)
+  deviceId         String
+  scannedById      String
+  scannedBy        User           @relation("ScanPerformedBy", fields: [scannedById], references: [id])
+  result           ScanResult
+  reason           String?
+  source           ScanSource     @default(ONLINE)
+  scannedAt        DateTime
+  syncedAt         DateTime?
+  createdAt        DateTime       @default(now())
+
+  @@index([matchId, result])
+  @@index([accreditationId])
+  @@map("scan_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Notifications — module `notifications` (cahier §20)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum NotificationEvent {
+  ACCOUNT_CREATED
+  REQUEST_RECEIVED
+  COMPLEMENT_REQUESTED
+  REQUEST_VALIDATED
+  REQUEST_REJECTED
+  BADGE_AVAILABLE
+  MATCH_UPDATED
+  CLOSURE_REMINDER
+  ACCREDITATION_REVOKED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model NotificationTemplate {
+  id           String              @id @default(uuid())
+  event        NotificationEvent
+  channel      NotificationChannel @default(EMAIL)
+  locale       String              @default("fr")
+  subject      String?
+  bodyTemplate String
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([event, channel, locale])
+  @@map("notification_templates")
+}
+
+model NotificationLog {
+  id               String              @id @default(uuid())
+  event            NotificationEvent
+  channel          NotificationChannel
+  recipientUserId  String?
+  recipientUser    User?               @relation("NotificationRecipient", fields: [recipientUserId], references: [id])
+  recipientAddress String
+  status           NotificationStatus  @default(PENDING)
+  providerResponse String?
+  sentAt           DateTime?
+  createdAt        DateTime            @default(now())
+
+  @@index([recipientUserId])
+  @@index([event, status])
+  @@map("notification_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Audit — module `audit` (cahier §24)
+// ─────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+  actorRole  String?
+  action     String
+  objectType String
+  objectId   String?
+  oldValue   Json?
+  newValue   Json?
+  deviceInfo String?
+  result     String?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([objectType, objectId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

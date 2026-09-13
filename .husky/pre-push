@@ -1,0 +1,8 @@
+echo "[pre-push] Compilation..."
+npm run build || exit 1
+
+echo "[pre-push] Tests..."
+npm test || exit 1
+
+echo "[pre-push] Audit de securite (avertissement uniquement, ne bloque pas le push)..."
+npm audit --omit=dev --audit-level=high || echo "[pre-push] Des vulnerabilites ont ete signalees ci-dessus — a traiter, mais le push n'est pas bloque."
