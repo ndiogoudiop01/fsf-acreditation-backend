@@ -36,22 +36,27 @@ enum UserStatus {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String
-  kind         UserKind
-  role         StaffRole?
-  status       UserStatus @default(PENDING)
-  mfaEnabled   Boolean    @default(false)
+  id                  String     @id @default(uuid())
+  email               String     @unique
+  passwordHash        String
+  kind                UserKind
+  role                StaffRole?
+  status              UserStatus @default(PENDING)
+  mfaEnabled          Boolean    @default(false)
   // Nom d'affichage humain (ex. "Agent Cdt. Sarr") pour les journaux de scan
   // et interfaces internes — l'email seul est peu lisible sur le terrain.
-  displayName  String?
-  lastLoginAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  displayName         String?
+  lastLoginAt         DateTime?
+  // Verrouillage temporaire apres N echecs consecutifs (cahier §24, brute
+  // force) : compteur remis a zero a chaque connexion reussie.
+  failedLoginAttempts Int        @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   requesterProfile RequesterProfile?
   refreshTokens    RefreshToken[]
+  loginAttempts    LoginAttempt[]
 
   uploadedDocuments     Document[]          @relation("DocumentUploadedBy")
   reviewedDocuments     Document[]          @relation("DocumentReviewedBy")
@@ -64,6 +69,30 @@ model User {
 
   @@index([kind, role])
   @@map("users")
+}
+
+/**
+ * Historique de connexion (cahier §24 : traçabilite des tentatives, IP,
+ * appareil). Table dediee et indexee, distincte du journal d'audit generique
+ * (`AuditLog`, alimente en parallele via l'evenement de domaine) : necessaire
+ * pour compter efficacement les echecs recents (verrouillage de compte) et
+ * pour lister l'historique par utilisateur sans parser du JSON.
+ */
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  email     String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ipAddress String?
+  userAgent String?
+  succeeded Boolean
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("login_attempts")
 }
 
 model RefreshToken {
@@ -218,26 +247,26 @@ enum MatchStatus {
 }
 
 model Match {
-  id                  String      @id @default(uuid())
-  competitionId       String
-  competition         Competition @relation(fields: [competitionId], references: [id])
-  homeTeam            String
-  awayTeam            String
-  kickoffAt           DateTime
-  timezone            String      @default("Africa/Dakar")
-  stadium             String
-  city                String
-  status              MatchStatus @default(DRAFT)
-  capacityTotal       Int?
+  id                   String      @id @default(uuid())
+  competitionId        String
+  competition          Competition @relation(fields: [competitionId], references: [id])
+  homeTeam             String
+  awayTeam             String
+  kickoffAt            DateTime
+  timezone             String      @default("Africa/Dakar")
+  stadium              String
+  city                 String
+  status               MatchStatus @default(DRAFT)
+  capacityTotal        Int?
   /// Nombre de pupitres disponibles en tribune presse pour ce match (jauge
   /// admin, cahier §21) — distinct de la capacite totale du stade.
   pressTribuneCapacity Int?
-  requestsOpenAt      DateTime?
-  requestsCloseAt     DateTime?
-  rulesNotes          String?
-  operationalContacts Json?
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  requestsOpenAt       DateTime?
+  requestsCloseAt      DateTime?
+  rulesNotes           String?
+  operationalContacts  Json?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
   quotas   MatchCategoryQuota[]
   requests AccreditationRequest[]

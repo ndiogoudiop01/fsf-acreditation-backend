@@ -1,4 +1,12 @@
-import { Body, Controller, Inject, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Headers,
+  Inject,
+  Ip,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../shared/decorators/public.decorator.js';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator.js';
@@ -29,27 +37,48 @@ export class AuthController {
   @ApiOperation({
     summary: 'Creation de compte demandeur + profil (cahier §4.4, §8)',
   })
-  async registerRequester(@Body() dto: RegisterRequesterDto) {
+  async registerRequester(
+    @Body() dto: RegisterRequesterDto,
+    @Ip() ipAddress: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
     const user = await this.usersService.createRequesterAccount(
       dto.email,
       dto.password,
     );
     await this.requesterProfiles.createProfile(user.id, dto);
-    return this.authService.login(dto.email, dto.password);
+    return this.authService.login(dto.email, dto.password, {
+      ipAddress,
+      userAgent,
+    });
   }
 
   @Post('login')
   @Public()
   @ApiOperation({ summary: 'Connexion (compte interne ou demandeur)' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
+  login(
+    @Body() dto: LoginDto,
+    @Ip() ipAddress: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.authService.login(dto.email, dto.password, {
+      ipAddress,
+      userAgent,
+    });
   }
 
   @Post('refresh')
   @Public()
   @ApiOperation({ summary: 'Rafraichir la session (rotation du jeton)' })
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto.refreshToken);
+  refresh(
+    @Body() dto: RefreshTokenDto,
+    @Ip() ipAddress: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.authService.refresh(dto.refreshToken, {
+      ipAddress,
+      userAgent,
+    });
   }
 
   @Post('logout')

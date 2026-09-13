@@ -18,8 +18,12 @@ export class AuditListener {
     const {
       eventName,
       occurredAt: _occurredAt,
+      // Extrait a part : porte l'auteur de l'action (quand l'evenement le
+      // renseigne) plutot que de finir noye dans `newValue` ou pris a tort
+      // pour l'`objectId` par l'heuristique ci-dessous.
+      actorId,
       ...fields
-    } = event as DomainEvent & Record<string, unknown>;
+    } = event as DomainEvent & Record<string, unknown> & { actorId?: string };
     if (!eventName) return; // ignore les evenements internes non issus de DomainEvent
 
     const objectId = Object.entries(fields).find(([key]) =>
@@ -27,6 +31,7 @@ export class AuditListener {
     )?.[1] as string | undefined;
 
     await this.audit.record({
+      actorId: typeof actorId === 'string' ? actorId : undefined,
       action: eventName,
       objectType: eventName.split('.')[0] ?? 'unknown',
       objectId,

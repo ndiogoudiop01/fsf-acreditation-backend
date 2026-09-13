@@ -35,6 +35,8 @@ export const buildConfiguration = (env: Env) => ({
       memoryCost: env.ARGON2_MEMORY_COST,
       timeCost: env.ARGON2_TIME_COST,
     },
+    maxFailedLoginAttempts: env.AUTH_MAX_FAILED_LOGIN_ATTEMPTS,
+    lockoutDurationMinutes: env.AUTH_LOCKOUT_DURATION_MINUTES,
   },
   qrCode: {
     tokenSecret: env.QR_TOKEN_SECRET,

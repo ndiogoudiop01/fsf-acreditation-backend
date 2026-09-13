@@ -11,9 +11,19 @@ futures")**. Chaque ligne référence la section correspondante du cahier des ch
 - [MVP] 5 rôles internes : Administrateur, Responsable accréditation, Commission de validation,
   Agent de contrôle d'accès, Superviseur/Reporting — permissions par rôle (principe du moindre
   privilège, matrice §23).
-- [MVP] Création, invitation, activation/désactivation d'un compte interne.
+- [MVP] CRUD complet d'un compte interne : création, détail, modification (rôle/nom affiché),
+  activation/désactivation/suspension, suppression définitive (bloquée si le compte a un
+  historique d'activité — documents traités, décisions, scans... — auquel cas seule la
+  désactivation est possible). Un administrateur ne peut ni modifier le statut ni supprimer son
+  propre compte.
+- [MVP] Verrouillage temporaire d'un compte après N échecs de connexion consécutifs (seuil et
+  durée configurables), levé automatiquement à la réactivation par un administrateur.
+- [MVP] Traçabilité des connexions : IP, appareil (user-agent), succès/échec et motif pour
+  chaque tentative — consultable par utilisateur ou de façon transversale (cahier §24).
 - [Backlog] Authentification à deux facteurs (MFA) — "si retenue" par la FSF.
 - [Backlog] Revue périodique automatisée des habilitations (rappel planifié).
+- [Backlog] Invitation en libre-service par lien à usage unique (le MVP crée le compte avec un
+  mot de passe temporaire communiqué hors bande par l'administrateur).
 
 ## 2. Médias & demandeurs (§7, §8)
 

@@ -5,8 +5,9 @@ rapport au tableau conceptuel du cahier des charges (§29).
 
 | Entité (table) | Rôle | Points notables |
 |---|---|---|
-| `User` | Compte unifié STAFF/REQUESTER | `kind` discrimine ; `role` (`StaffRole`) uniquement pour STAFF. Le mot de passe (`passwordHash`, argon2id) n'est **jamais** exposé par l'API (requêtes Prisma avec `select` explicite dans `UsersService`). |
-| `RefreshToken` | Session de rafraîchissement | Seul le **hash HMAC** du jeton est stocké ; rotation à chaque usage (l'ancien est révoqué). |
+| `User` | Compte unifié STAFF/REQUESTER | `kind` discrimine ; `role` (`StaffRole`) uniquement pour STAFF. Le mot de passe (`passwordHash`, argon2id) n'est **jamais** exposé par l'API (requêtes Prisma avec `select` explicite dans `UsersService`). `failedLoginAttempts`/`lockedUntil` portent le verrouillage temporaire (cahier §24). |
+| `RefreshToken` | Session de rafraîchissement | Seul le **hash HMAC** du jeton est stocké ; rotation à chaque usage (l'ancien est révoqué). `createdByIp`/`userAgent` tracent l'appareil à l'origine de la session. |
+| `LoginAttempt` | Historique de connexion (§24) | Une ligne par tentative (succès ou échec), avec IP/user-agent/motif — table dédiée et indexée, distincte de `AuditLog` (alimentée en parallèle) pour compter efficacement les échecs récents et lister l'historique par utilisateur sans parser du JSON. |
 | `Media` | Référentiel médias (§7) | Dédoublonnage par `(name, country)` à la création. |
 | `RequesterProfile` | Profil professionnel (§8) | 1:1 avec `User` (`userId` unique). Rattaché à un `Media`. |
 | `Competition`, `Match` | §5, §6 | `Match.requestsOpenAt/CloseAt` pilotent l'ouverture des demandes ; clôture automatique par cron (`MatchesService.closeExpiredMatches`). |

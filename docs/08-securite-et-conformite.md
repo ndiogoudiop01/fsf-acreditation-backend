@@ -10,7 +10,8 @@
 | MFA | Non implémenté (cahier : "si retenue") — champ `User.mfaEnabled` réservé pour une implémentation Phase 2 (TOTP) |
 | Rôles et permissions côté serveur | `PermissionsGuard` + `RequirePermissions()`, jamais de contrôle uniquement côté client |
 | Protection injection/XSS | ORM paramétré (Prisma), `ValidationPipe` global (`whitelist`, `forbidNonWhitelisted`), Helmet |
-| Brute force | `ThrottlerGuard` global (limite configurable via `THROTTLE_*`) |
+| Brute force | `ThrottlerGuard` global (limite configurable via `THROTTLE_*`) **+** verrouillage par compte apres N echecs consecutifs (`AUTH_MAX_FAILED_LOGIN_ATTEMPTS`, defaut 5 ; duree `AUTH_LOCKOUT_DURATION_MINUTES`, defaut 15) — `UsersService.recordFailedLogin`/`recordSuccessfulLogin` |
+| Traçabilite des connexions | Table dediee `LoginAttempt` (email, IP, user-agent, succes/echec, motif) alimentee par evenement a chaque tentative, en plus du `RefreshToken.createdByIp`/`userAgent` ; consultable par utilisateur (`GET /admin/users/:id/login-history`) ou transversalement (`GET /admin/users/login-attempts`) |
 | Téléchargement non autorisé | Documents et badges servis via URLs S3 **pré-signées temporaires** (300s par défaut), jamais de lien public permanent |
 | Chiffrement des documents | Chiffrement au repos délégué au bucket S3 (SSE côté fournisseur) — à activer explicitement en production selon l'hébergeur retenu |
 | Sauvegardes testées | Hors périmètre applicatif — responsabilité infra (cf. `12-deploiement.md`) |
@@ -34,6 +35,12 @@ Voir `git log` pour le commit correspondant.
 d'exiger un appel d'audit manuel dans chaque cas d'usage — garantit qu'aucune action métier
 future n'est oubliée du journal (cahier §24), au prix d'un format `newValue` moins structuré
 (JSON brut des champs de l'événement).
+
+L'auteur de l'action (`actorId`) est capturé quand l'événement le renseigne explicitement (champ
+`actorId` sur la classe d'événement) — c'est le cas pour tous les événements du module `iam`
+(création/modification/suppression de compte, connexion). Les événements plus anciens des autres
+modules ne portent pas encore ce champ ; l'étendre progressivement à mesure que la traçabilité
+par acteur devient nécessaire ailleurs est le complément naturel de ce travail.
 
 ## Données personnelles (cahier §28.2, loi sénégalaise n° 2008-12)
 

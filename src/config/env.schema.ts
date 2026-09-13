@@ -57,6 +57,9 @@ export const envSchema = z.object({
   JWT_REFRESH_TTL: z.string().default('30d'),
   ARGON2_MEMORY_COST: z.coerce.number().int().positive().default(19456),
   ARGON2_TIME_COST: z.coerce.number().int().positive().default(2),
+  // Verrouillage de compte apres N echecs consecutifs (cahier §24, brute force).
+  AUTH_MAX_FAILED_LOGIN_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  AUTH_LOCKOUT_DURATION_MINUTES: z.coerce.number().int().positive().default(15),
 
   QR_TOKEN_SECRET: z
     .string()

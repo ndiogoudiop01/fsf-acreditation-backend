@@ -8,12 +8,25 @@ import { TokenHasherService } from '../../infrastructure/security/token-hasher.s
 import { DomainError } from '../../shared/kernel/errors/domain.error.js';
 import { ErrorCodes } from '../../shared/kernel/errors/error-catalog.js';
 import { permissionsForRole } from '../../shared/kernel/permissions/permission-catalog.js';
+import {
+  EVENT_BUS_PORT,
+  type EventBusPort,
+} from '../../shared/kernel/ports/event-bus.port.js';
 import type { AuthenticatedUser } from '../../shared/kernel/types/authenticated-user.js';
 import {
   REQUESTER_PROFILES_FACADE,
   type RequesterProfilesFacade,
 } from '../media/media.facade.js';
+import {
+  UserLoginFailedEvent,
+  UserLoginSucceededEvent,
+} from './events/user.events.js';
 import { UsersService } from './users.service.js';
+
+export interface LoginContext {
+  ipAddress?: string;
+  userAgent?: string;
+}
 
 export interface AuthTokens {
   accessToken: string;
@@ -32,17 +45,46 @@ export class AuthService {
     private readonly config: AppConfigService,
     @Inject(REQUESTER_PROFILES_FACADE)
     private readonly requesterProfiles: RequesterProfilesFacade,
+    @Inject(EVENT_BUS_PORT) private readonly eventBus: EventBusPort,
   ) {}
 
   async login(
     email: string,
     password: string,
+    context: LoginContext = {},
   ): Promise<AuthTokens & { user: AuthenticatedUser }> {
     const user = await this.users.findByEmail(email);
-    if (
-      !user ||
-      !(await this.passwordHasher.verify(user.passwordHash, password))
-    ) {
+
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+      this.eventBus.publish(
+        new UserLoginFailedEvent(
+          email,
+          'ACCOUNT_LOCKED',
+          context.ipAddress,
+          context.userAgent,
+          user.id,
+        ),
+      );
+      throw new DomainError(
+        ErrorCodes.ACCOUNT_LOCKED,
+        `Compte temporairement verrouille suite a plusieurs echecs de connexion. Reessayez apres ${user.lockedUntil.toISOString()}.`,
+        'FORBIDDEN',
+      );
+    }
+
+    const passwordValid =
+      !!user && (await this.passwordHasher.verify(user.passwordHash, password));
+    if (!user || !passwordValid) {
+      if (user) await this.users.recordFailedLogin(user.id);
+      this.eventBus.publish(
+        new UserLoginFailedEvent(
+          email,
+          'INVALID_CREDENTIALS',
+          context.ipAddress,
+          context.userAgent,
+          user?.id,
+        ),
+      );
       throw new DomainError(
         ErrorCodes.INVALID_CREDENTIALS,
         'Identifiants invalides.',
@@ -50,18 +92,40 @@ export class AuthService {
       );
     }
     if (user.status !== UserStatus.ACTIVE) {
+      this.eventBus.publish(
+        new UserLoginFailedEvent(
+          email,
+          'ACCOUNT_INACTIVE',
+          context.ipAddress,
+          context.userAgent,
+          user.id,
+        ),
+      );
       throw new DomainError(
         ErrorCodes.INVALID_CREDENTIALS,
         "Ce compte n'est pas actif.",
         'FORBIDDEN',
       );
     }
-    await this.users.touchLastLogin(user.id);
-    const tokens = await this.issueTokens(user);
+
+    await this.users.recordSuccessfulLogin(user.id);
+    this.eventBus.publish(
+      new UserLoginSucceededEvent(
+        user.id,
+        user.email,
+        user.id,
+        context.ipAddress,
+        context.userAgent,
+      ),
+    );
+    const tokens = await this.issueTokens(user, context);
     return { ...tokens, user: await this.toAuthenticatedUser(user) };
   }
 
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  async refresh(
+    refreshToken: string,
+    context: LoginContext = {},
+  ): Promise<AuthTokens> {
     const tokenHash = this.tokenHasher.hash(refreshToken);
     const stored = await this.prisma.refreshToken.findUnique({
       where: { tokenHash },
@@ -80,7 +144,7 @@ export class AuthService {
       where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
-    return this.issueTokens(user);
+    return this.issueTokens(user, context);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -106,7 +170,10 @@ export class AuthService {
     };
   }
 
-  private async issueTokens(user: User): Promise<AuthTokens> {
+  private async issueTokens(
+    user: User,
+    context: LoginContext = {},
+  ): Promise<AuthTokens> {
     const { accessSecret, accessTtl, refreshTtl } = this.config.auth;
 
     const accessToken = await this.jwtService.signAsync(
@@ -125,6 +192,8 @@ export class AuthService {
         userId: user.id,
         tokenHash,
         expiresAt: addDuration(new Date(), refreshTtl),
+        createdByIp: context.ipAddress,
+        userAgent: context.userAgent,
       },
     });
 
