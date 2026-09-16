@@ -1,0 +1,26 @@
+node_modules
+dist
+coverage
+.git
+.github
+.husky
+.vscode
+.idea
+
+# Env & secrets - jamais dans le build context
+.env
+.env.*
+!.env.example
+
+# Docs & fichiers non necessaires au build
+docs
+*.md
+cahier_charges_accreditations_fsf.pdf
+
+# Tests
+test
+vitest.config.ts
+vitest.config.e2e.ts
+
+*.tsbuildinfo
+npm-debug.log*

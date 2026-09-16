@@ -27,6 +27,10 @@ docker build -f docker/Dockerfile -t fsf-accreditation-backend .
 docker compose up -d   # demarre postgres, redis, minio, mailpit et l'API
 ```
 
+`docker/entrypoint.sh` exécute `prisma migrate deploy` avant de démarrer l'application — voir
+`docs/13-deploiement-dokploy.md` pour la procédure complète de déploiement sur un VPS via
+[Dokploy](https://dokploy.com/) (variables d'environnement, domaine/HTTPS, health check).
+
 ## Variables d'environnement obligatoires en production
 
 Toutes celles listées dans `.env.example`, en particulier :
